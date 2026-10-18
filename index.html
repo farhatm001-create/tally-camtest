@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0b0c">
+<title>Tally Camera Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #0b0b0c; --panel: #151517; --line: #26262a; --text: #f2f2f0; --dim: #8d8d93;
+    --live: #ff3b30; --kept: #30d158; --amber: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    max-width: 560px; margin: 0 auto;
+  }
+  h1 { font: 600 28px/1.1 "Barlow Semi Condensed", sans-serif; letter-spacing: .02em; margin: 4px 0 2px; display: flex; align-items: center; gap: 10px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.on { background: var(--live); box-shadow: 0 0 0 3px rgba(255,59,48,.25); }
+  .sub { color: var(--dim); margin: 0 0 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 0 0 12px; }
+  h2 { font: 600 13px/1 "Barlow Condensed", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
+  button {
+    font: 600 17px/1 "Barlow Semi Condensed", sans-serif; letter-spacing: .03em;
+    width: 100%; padding: 15px; border-radius: 12px; border: 0; background: var(--text); color: #000; margin: 4px 0;
+  }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .35; }
+  .preview { position: relative; width: 100%; aspect-ratio: 9 / 16; max-height: 52vh; background: #000; border-radius: 12px; overflow: hidden; margin: 0 0 10px; }
+  .preview video { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+  .badge { position: absolute; left: 10px; top: 10px; font: 600 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; background: rgba(0,0,0,.6); padding: 6px 8px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { text-align: left; padding: 7px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { font: 600 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); border-top: 0; }
+  td.num { font-family: "Barlow Condensed", sans-serif; font-size: 17px; }
+  .ok { color: var(--kept); } .warn { color: var(--amber); } .bad { color: var(--live); }
+  .status { color: var(--dim); min-height: 1.4em; margin: 6px 0 0; }
+  select { width: 100%; font-size: 16px; padding: 12px; border-radius: 12px; background: #000; color: var(--text); border: 1px solid var(--line); margin: 4px 0; }
+  pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, Menlo, monospace; color: #cfcfd4; margin: 0 0 8px; }
+  .verdict { font: 600 20px/1.25 "Barlow Semi Condensed", sans-serif; margin: 0 0 6px; }
+</style>
+</head>
+<body>
+  <h1><span class="dot" id="dot"></span>Tally camera test</h1>
+  <p class="sub">Checks what Safari gives Tally on this iPhone: front-camera resolution, real frame rate, recording format and voice recognition. Nothing leaves your phone.</p>
+
+  <section>
+    <h2>1 · Camera modes</h2>
+    <div class="preview"><video id="preview" playsinline muted autoplay></video><div class="badge" id="badge">—</div></div>
+    <button id="probeBtn">Test camera modes</button>
+    <p class="status" id="probeStatus">Allow camera access when Safari asks. Takes about 20 seconds.</p>
+    <table id="probeTable" hidden>
+      <thead><tr><th>Asked</th><th>Got</th><th>Real fps</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>2 · Record 10 seconds</h2>
+    <select id="modeSelect" disabled><option>Run step 1 first</option></select>
+    <button id="recBtn" disabled>Record 10 s clip</button>
+    <p class="status" id="recStatus"></p>
+    <table id="recTable" hidden><tbody></tbody></table>
+    <button id="saveBtn" class="ghost" hidden>Save clip (share › Save Video)</button>
+  </section>
+
+  <section>
+    <h2>3 · Voice (Follow voice mode)</h2>
+    <button id="voiceBtn" class="ghost">Test voice: say one sentence in Hindi/Urdu</button>
+    <p class="status" id="voiceStatus"></p>
+  </section>
+
+  <section>
+    <h2>Results</h2>
+    <p class="verdict" id="verdict">Run steps 1 and 2.</p>
+    <pre id="report"></pre>
+    <button id="copyBtn" class="ghost">Copy results</button>
+    <p class="status" id="copyStatus">Paste them to Claude, or send a screenshot of this box.</p>
+  </section>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const preview = $('preview');
+const results = { device: navigator.userAgent, standalone: !!navigator.standalone, modes: [], recordings: [], voice: null, wakeLock: 'wakeLock' in navigator };
+let stream = null;
+let lastClip = null;
+
+const MODES = [
+  { label: '4K · 60', w: 3840, h: 2160, fps: 60 },
+  { label: '4K · 30', w: 3840, h: 2160, fps: 30 },
+  { label: '1080p · 60', w: 1920, h: 1080, fps: 60 },
+  { label: '1080p · 30', w: 1920, h: 1080, fps: 30 },
+];
+
+const MIME_CANDIDATES = [
+  'video/mp4;codecs=hvc1', 'video/mp4;codecs=hevc', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm',
+];
+results.mimeSupported = window.MediaRecorder ? MIME_CANDIDATES.filter((m) => MediaRecorder.isTypeSupported(m)) : [];
+
+function stopStream() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = null;
+  preview.srcObject = null;
+  $('dot').classList.remove('on');
+}
+
+async function open(mode, audio) {
+  stopStream();
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio,
+    video: { facingMode: 'user', width: { ideal: mode.w }, height: { ideal: mode.h }, frameRate: { ideal: mode.fps } },
+  });
+  preview.srcObject = stream;
+  await preview.play().catch(() => {});
+  return stream.getVideoTracks()[0];
+}
+
+// Counts frames the camera actually delivers (getSettings only reports what was granted).
+function measureFps(video, ms) {
+  return new Promise((resolve) => {
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return resolve(null);
+    let first = null, last = null, frames = 0;
+    const end = performance.now() + ms;
+    const step = (now, meta) => {
+      if (first === null) first = meta.mediaTime;
+      last = meta.mediaTime; frames++;
+      if (now < end) video.requestVideoFrameCallback(step);
+      else resolve(last > first ? (frames - 1) / (last - first) : null);
+    };
+    video.requestVideoFrameCallback(step);
+  });
+}
+
+const fmt = (s) => s && s.width ? `${s.width}×${s.height} @ ${Math.round(s.frameRate || 0)}` : '—';
+const pixels = (s) => (s.width || 0) * (s.height || 0);
+
+$('probeBtn').onclick = async () => {
+  $('probeBtn').disabled = true;
+  const tbody = $('probeTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  $('probeTable').hidden = false;
+  results.modes = [];
+  try {
+    for (const mode of MODES) {
+      $('probeStatus').textContent = `Testing ${mode.label}…`;
+      const track = await open(mode, false);
+      $('dot').classList.add('on');
+      await new Promise((r) => setTimeout(r, 700)); // let exposure and frame rate settle
+      const settings = track.getSettings();
+      const caps = track.getCapabilities ? track.getCapabilities() : null;
+      const realFps = await measureFps(preview, 2500);
+      $('badge').textContent = `${fmt(settings)} · real ${realFps ? realFps.toFixed(1) : '?'} fps`;
+      const row = { asked: mode.label, w: settings.width, h: settings.height, fps: settings.frameRate, realFps, caps: caps && { width: caps.width, height: caps.height, frameRate: caps.frameRate } };
+      results.modes.push(row);
+      const fpsClass = realFps && realFps >= mode.fps * 0.9 ? 'ok' : 'warn';
+      const resClass = Math.max(settings.width, settings.height) >= Math.max(mode.w, mode.h) ? 'ok' : 'warn';
+      tbody.insertAdjacentHTML('beforeend', `<tr><td>${mode.label}</td><td class="num ${resClass}">${fmt(settings)}</td><td class="num ${fpsClass}">${realFps ? realFps.toFixed(1) : '?'}</td></tr>`);
+    }
+    $('probeStatus').textContent = 'Done. Green = got what was asked, amber = less.';
+    const sel = $('modeSelect');
+    sel.innerHTML = MODES.map((m, i) => `<option value="${i}">${m.label} (got ${fmt(results.modes[i])})</option>`).join('');
+    sel.value = String(bestModeIndex());
+    sel.disabled = false;
+    $('recBtn').disabled = false;
+  } catch (err) {
+    $('probeStatus').innerHTML = `<span class="bad">Camera error: ${err.name} — ${err.message}</span>`;
+    results.cameraError = `${err.name}: ${err.message}`;
+  } finally {
+    stopStream();
+    $('probeBtn').disabled = false;
+    render();
+  }
+};
+
+function bestModeIndex() {
+  let best = 0, score = -1;
+  results.modes.forEach((r, i) => {
+    const s = (r.w || 0) * (r.h || 0) * Math.min(r.realFps || r.fps || 0, MODES[i].fps);
+    if (s > score) { score = s; best = i; }
+  });
+  return best;
+}
+
+$('recBtn').onclick = async () => {
+  if (!window.MediaRecorder) { $('recStatus').innerHTML = '<span class="bad">MediaRecorder not available in this browser.</span>'; return; }
+  const mode = MODES[Number($('modeSelect').value)];
+  $('recBtn').disabled = true; $('saveBtn').hidden = true;
+  try {
+    const track = await open(mode, true); // with mic, like a real take
+    $('dot').classList.add('on');
+    const settings = track.getSettings();
+    const mimeType = results.mimeSupported[0] || '';
+    const bits = pixels(settings) >= 3840 * 2160 * 0.9 ? 50e6 : 16e6;
+    const rec = new MediaRecorder(stream, { mimeType: mimeType || undefined, videoBitsPerSecond: bits, audioBitsPerSecond: 192e3 });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const done = new Promise((r) => (rec.onstop = r));
+    rec.start(1000);
+    for (let s = 10; s > 0; s--) { $('recStatus').textContent = `Recording… ${s}s (talk normally)`; await new Promise((r) => setTimeout(r, 1000)); }
+    rec.stop();
+    await done;
+    stopStream();
+    $('recStatus').textContent = 'Checking the clip…';
+    const blob = new Blob(chunks, { type: rec.mimeType || mimeType || 'video/mp4' });
+    lastClip = blob;
+    const info = await inspectClip(blob);
+    const row = { asked: mode.label, liveSettings: fmt(settings), mime: blob.type, sizeMB: +(blob.size / 1e6).toFixed(1), mbps: info.duration ? +((blob.size * 8) / info.duration / 1e6).toFixed(1) : null, ...info };
+    results.recordings.push(row);
+    const t = $('recTable').querySelector('tbody');
+    t.innerHTML = [
+      ['Format', row.mime], ['Camera gave', row.liveSettings],
+      ['File frame', `${row.width}×${row.height}`], ['File fps', row.fileFps ? row.fileFps.toFixed(1) : '?'],
+      ['Length', row.duration ? `${row.duration.toFixed(1)} s` : '?'], ['Size', `${row.sizeMB} MB · ${row.mbps ?? '?'} Mbps`],
+      ['Orientation', row.height > row.width ? '<span class="ok">portrait</span>' : '<span class="warn">landscape (needs rotating in edit)</span>'],
+    ].map(([k, v]) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`).join('');
+    $('recTable').hidden = false;
+    $('recStatus').textContent = 'Done. Save the clip and send it to the laptop if you can — I can check it exactly.';
+    $('saveBtn').hidden = false;
+  } catch (err) {
+    $('recStatus').innerHTML = `<span class="bad">Recording error: ${err.name} — ${err.message}</span>`;
+    results.recordError = `${err.name}: ${err.message}`;
+  } finally {
+    stopStream();
+    $('recBtn').disabled = false;
+    render();
+  }
+};
+
+// Plays the recorded file muted and counts its distinct frames.
+function inspectClip(blob) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.src = URL.createObjectURL(blob);
+    const out = { width: 0, height: 0, duration: null, fileFps: null };
+    const finish = () => { URL.revokeObjectURL(v.src); resolve(out); };
+    setTimeout(finish, 20000);
+    v.onloadedmetadata = async () => {
+      out.width = v.videoWidth; out.height = v.videoHeight;
+      out.duration = isFinite(v.duration) ? v.duration : null;
+      if (!('requestVideoFrameCallback' in v)) return finish();
+      const seen = new Set();
+      const step = (_, meta) => { seen.add(meta.mediaTime.toFixed(4)); if (!v.ended) v.requestVideoFrameCallback(step); };
+      v.requestVideoFrameCallback(step);
+      v.onended = () => { const d = out.duration || v.currentTime; if (d) out.fileFps = seen.size / d; finish(); };
+      v.play().catch(finish);
+    };
+    v.onerror = finish;
+  });
+}
+
+$('saveBtn').onclick = async () => {
+  if (!lastClip) return;
+  const ext = lastClip.type.includes('webm') ? 'webm' : 'mp4';
+  const file = new File([lastClip], `tally-camtest.${ext}`, { type: lastClip.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); } catch (_) { /* user closed the sheet */ }
+  } else {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  }
+};
+
+$('voiceBtn').onclick = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { results.voice = 'not available'; $('voiceStatus').innerHTML = '<span class="bad">Speech recognition is not available in this browser.</span>'; render(); return; }
+  const sr = new SR();
+  sr.lang = 'hi-IN'; sr.interimResults = true; sr.continuous = true;
+  let text = '';
+  sr.onresult = (e) => { text = Array.from(e.results).map((r) => r[0].transcript).join(' '); $('voiceStatus').textContent = `Heard: ${text}`; };
+  sr.onerror = (e) => { results.voice = `error: ${e.error}`; $('voiceStatus').innerHTML = `<span class="bad">Voice error: ${e.error}</span>`; render(); };
+  sr.onend = () => { if (!results.voice || !results.voice.startsWith('error')) results.voice = text ? `works (hi-IN): "${text}"` : 'started but heard nothing'; $('voiceBtn').disabled = false; render(); };
+  $('voiceBtn').disabled = true;
+  $('voiceStatus').textContent = 'Listening for 8 seconds…';
+  sr.start();
+  setTimeout(() => sr.stop(), 8000);
+};
+
+function render() {
+  const best = results.modes.length ? results.modes[bestModeIndex()] : null;
+  const rec = results.recordings[results.recordings.length - 1];
+  let verdict = 'Run steps 1 and 2.';
+  if (rec) {
+    const long = Math.max(rec.width, rec.height), fps = rec.fileFps || 0;
+    if (long >= 3800 && fps >= 50) verdict = '4K 60 works in Safari. A web app is fully good enough.';
+    else if (long >= 3800) verdict = `4K at ~${Math.round(fps)} fps. Good for Shorts.`;
+    else if (long >= 1900 && fps >= 50) verdict = '1080p 60. Fine for Shorts, softer than native 4K.';
+    else if (long >= 1900) verdict = `1080p at ~${Math.round(fps)} fps. Usable fallback; native app is better.`;
+    else verdict = `Only ${rec.width}×${rec.height}. Web recording is not good enough.`;
+  } else if (best) {
+    verdict = `Camera offers up to ${fmt(best)}. Now record a clip (step 2).`;
+  }
+  $('verdict').textContent = verdict;
+  const lines = [
+    `TALLY CAMTEST ${new Date().toISOString().slice(0, 16)}`,
+    `device: ${results.device}`,
+    `home-screen app: ${results.standalone} · wake lock: ${results.wakeLock}`,
+    `recorder formats: ${results.mimeSupported.join(', ') || 'none'}`,
+    ...results.modes.map((r) => `mode ${r.asked}: got ${r.w}x${r.h}@${Math.round(r.fps || 0)} real ${r.realFps ? r.realFps.toFixed(1) : '?'}fps${r.caps && r.caps.frameRate ? ` caps fps<=${r.caps.frameRate.max} w<=${r.caps.width && r.caps.width.max} h<=${r.caps.height && r.caps.height.max}` : ''}`),
+    ...results.recordings.map((r) => `clip ${r.asked}: ${r.width}x${r.height} ${r.fileFps ? r.fileFps.toFixed(1) : '?'}fps ${r.duration ? r.duration.toFixed(1) : '?'}s ${r.sizeMB}MB ${r.mbps ?? '?'}Mbps ${r.mime}`),
+    results.cameraError ? `camera error: ${results.cameraError}` : '',
+    results.recordError ? `record error: ${results.recordError}` : '',
+    `voice: ${results.voice ?? 'not tested'}`,
+  ].filter(Boolean);
+  $('report').textContent = lines.join('\n');
+}
+
+$('copyBtn').onclick = async () => {
+  try { await navigator.clipboard.writeText($('report').textContent); $('copyStatus').textContent = 'Copied. Paste it to Claude.'; }
+  catch (_) { $('copyStatus').textContent = 'Copy blocked — take a screenshot of the results box instead.'; }
+};
+
+if (!navigator.mediaDevices || !window.isSecureContext) {
+  $('probeStatus').innerHTML = '<span class="bad">Camera needs a secure (https) page. Open this from the https link.</span>';
+  $('probeBtn').disabled = true;
+}
+render();
+</script>
+</body>
+</html>
