@@ -93,10 +93,12 @@ const results = { device: navigator.userAgent, standalone: !!navigator.standalon
 let stream = null;
 let lastClip = null;
 
+// "force" asks for exactly 60 fps; plain "ideal" lets Safari trade frame rate for resolution.
 const MODES = [
-  { label: '4K · 60', w: 3840, h: 2160, fps: 60 },
+  { label: '4K · 60 forced', w: 3840, h: 2160, fps: 60, force: true },
+  { label: '1440p · 60 forced', w: 2560, h: 1440, fps: 60, force: true },
+  { label: '1080p · 60 forced', w: 1920, h: 1080, fps: 60, force: true },
   { label: '4K · 30', w: 3840, h: 2160, fps: 30 },
-  { label: '1080p · 60', w: 1920, h: 1080, fps: 60 },
   { label: '1080p · 30', w: 1920, h: 1080, fps: 30 },
 ];
 
@@ -116,7 +118,7 @@ async function open(mode, audio) {
   stopStream();
   stream = await navigator.mediaDevices.getUserMedia({
     audio,
-    video: { facingMode: 'user', width: { ideal: mode.w }, height: { ideal: mode.h }, frameRate: { ideal: mode.fps } },
+    video: { facingMode: 'user', width: { ideal: mode.w }, height: { ideal: mode.h }, frameRate: mode.force ? { min: mode.fps, ideal: mode.fps } : { ideal: mode.fps } },
   });
   preview.srcObject = stream;
   await preview.play().catch(() => {});
@@ -127,11 +129,13 @@ async function open(mode, audio) {
 function measureFps(video, ms) {
   return new Promise((resolve) => {
     if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return resolve(null);
+    // Live streams can report a constant mediaTime, so use the frame's own capture/expected time.
     let first = null, last = null, frames = 0;
     const end = performance.now() + ms;
     const step = (now, meta) => {
-      if (first === null) first = meta.mediaTime;
-      last = meta.mediaTime; frames++;
+      const t = (meta.captureTime ?? meta.expectedDisplayTime ?? now) / 1000;
+      if (first === null) first = t;
+      last = t; frames++;
       if (now < end) video.requestVideoFrameCallback(step);
       else resolve(last > first ? (frames - 1) / (last - first) : null);
     };
@@ -151,7 +155,14 @@ $('probeBtn').onclick = async () => {
   try {
     for (const mode of MODES) {
       $('probeStatus').textContent = `Testing ${mode.label}…`;
-      const track = await open(mode, false);
+      let track;
+      try { track = await open(mode, false); }
+      catch (err) {
+        if (err.name !== 'OverconstrainedError') throw err;
+        results.modes.push({ asked: mode.label, w: 0, h: 0, fps: 0, realFps: null, refused: true });
+        tbody.insertAdjacentHTML('beforeend', `<tr><td>${mode.label}</td><td class="num bad">refused</td><td class="num">—</td></tr>`);
+        continue;
+      }
       $('dot').classList.add('on');
       await new Promise((r) => setTimeout(r, 700)); // let exposure and frame rate settle
       const settings = track.getSettings();
@@ -166,7 +177,10 @@ $('probeBtn').onclick = async () => {
     }
     $('probeStatus').textContent = 'Done. Green = got what was asked, amber = less.';
     const sel = $('modeSelect');
-    sel.innerHTML = MODES.map((m, i) => `<option value="${i}">${m.label} (got ${fmt(results.modes[i])})</option>`).join('');
+    sel.innerHTML = MODES.map((m, i) => {
+      const r = results.modes[i];
+      return `<option value="${i}" ${r.refused ? 'disabled' : ''}>${m.label} (${r.refused ? 'refused' : `got ${r.w}×${r.h} @ ${Math.round(r.realFps || r.fps)}`})</option>`;
+    }).join('');
     sel.value = String(bestModeIndex());
     sel.disabled = false;
     $('recBtn').disabled = false;
@@ -303,7 +317,7 @@ function render() {
     `device: ${results.device}`,
     `home-screen app: ${results.standalone} · wake lock: ${results.wakeLock}`,
     `recorder formats: ${results.mimeSupported.join(', ') || 'none'}`,
-    ...results.modes.map((r) => `mode ${r.asked}: got ${r.w}x${r.h}@${Math.round(r.fps || 0)} real ${r.realFps ? r.realFps.toFixed(1) : '?'}fps${r.caps && r.caps.frameRate ? ` caps fps<=${r.caps.frameRate.max} w<=${r.caps.width && r.caps.width.max} h<=${r.caps.height && r.caps.height.max}` : ''}`),
+    ...results.modes.map((r) => r.refused ? `mode ${r.asked}: REFUSED` : `mode ${r.asked}: got ${r.w}x${r.h}@${Math.round(r.fps || 0)} real ${r.realFps ? r.realFps.toFixed(1) : '?'}fps${r.caps && r.caps.frameRate ? ` caps fps<=${r.caps.frameRate.max} w<=${r.caps.width && r.caps.width.max} h<=${r.caps.height && r.caps.height.max}` : ''}`),
     ...results.recordings.map((r) => `clip ${r.asked}: ${r.width}x${r.height} ${r.fileFps ? r.fileFps.toFixed(1) : '?'}fps ${r.duration ? r.duration.toFixed(1) : '?'}s ${r.sizeMB}MB ${r.mbps ?? '?'}Mbps ${r.mime}`),
     results.cameraError ? `camera error: ${results.cameraError}` : '',
     results.recordError ? `record error: ${results.recordError}` : '',
