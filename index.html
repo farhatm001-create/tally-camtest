@@ -73,7 +73,13 @@
 
   <section>
     <h2>3 · Voice (Follow voice mode)</h2>
-    <button id="voiceBtn" class="ghost">Test voice: say one sentence in Hindi/Urdu</button>
+    <select id="voiceLang">
+      <option value="hi-IN">Hindi (hi-IN)</option>
+      <option value="ur-PK">Urdu (ur-PK)</option>
+      <option value="en-IN">English India (en-IN)</option>
+      <option value="en-US">English US (en-US)</option>
+    </select>
+    <button id="voiceBtn" class="ghost">Test voice: say one sentence</button>
     <p class="status" id="voiceStatus"></p>
   </section>
 
@@ -285,12 +291,22 @@ $('saveBtn').onclick = async () => {
 $('voiceBtn').onclick = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { results.voice = 'not available'; $('voiceStatus').innerHTML = '<span class="bad">Speech recognition is not available in this browser.</span>'; render(); return; }
+  const lang = $('voiceLang').value;
+  const HINTS = {
+    'not-allowed': 'Microphone or speech permission was blocked. Check Settings › Apps › Safari › Microphone = Allow, then reload.',
+    'service-not-allowed': 'iPhone speech service is off. Turn on Settings › General › Keyboard › Enable Dictation (and Siri if asked), then reload.',
+    'language-not-supported': 'This language is not supported by Safari speech. Try another one in the list.',
+    'network': 'Speech service could not be reached. Check the internet connection.',
+    'no-speech': 'No speech heard. Tap again and speak right away.',
+    'audio-capture': 'The microphone is busy. Close other apps using it and reload.',
+  };
   const sr = new SR();
-  sr.lang = 'hi-IN'; sr.interimResults = true; sr.continuous = true;
+  sr.lang = lang; sr.interimResults = true; sr.continuous = true;
   let text = '';
+  results.voice = null;
   sr.onresult = (e) => { text = Array.from(e.results).map((r) => r[0].transcript).join(' '); $('voiceStatus').textContent = `Heard: ${text}`; };
-  sr.onerror = (e) => { results.voice = `error: ${e.error}`; $('voiceStatus').innerHTML = `<span class="bad">Voice error: ${e.error}</span>`; render(); };
-  sr.onend = () => { if (!results.voice || !results.voice.startsWith('error')) results.voice = text ? `works (hi-IN): "${text}"` : 'started but heard nothing'; $('voiceBtn').disabled = false; render(); };
+  sr.onerror = (e) => { results.voice = `error (${lang}): ${e.error}`; $('voiceStatus').innerHTML = `<span class="bad">Voice error: ${e.error}</span><br>${HINTS[e.error] || ''}`; render(); };
+  sr.onend = () => { if (!results.voice) results.voice = text ? `works (${lang}): "${text}"` : `started but heard nothing (${lang})`; $('voiceBtn').disabled = false; render(); };
   $('voiceBtn').disabled = true;
   $('voiceStatus').textContent = 'Listening for 8 seconds…';
   sr.start();
