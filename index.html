@@ -84,6 +84,12 @@
   </section>
 
   <section>
+    <h2>4 · Record + voice together</h2>
+    <button id="bothBtn" class="ghost">Record 20 s while listening (read any text aloud)</button>
+    <p class="status" id="bothStatus">Uses the language picked in step 3. This is how a real Follow-voice take works.</p>
+  </section>
+
+  <section>
     <h2>Results</h2>
     <p class="verdict" id="verdict">Run steps 1 and 2.</p>
     <pre id="report"></pre>
@@ -313,6 +319,89 @@ $('voiceBtn').onclick = () => {
   setTimeout(() => sr.stop(), 8000);
 };
 
+// Decodes the clip's audio and measures loudness, to prove the mic reached the file.
+async function clipAudioLevel(blob) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const data = buf.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 16) sum += data[i] * data[i];
+    ctx.close();
+    const rms = Math.sqrt(sum / (data.length / 16));
+    return rms > 0 ? +(20 * Math.log10(rms)).toFixed(1) : -120;
+  } catch (_) { return null; }
+}
+
+$('bothBtn').onclick = async () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || !window.MediaRecorder) { $('bothStatus').innerHTML = '<span class="bad">Needs both speech recognition and recording.</span>'; return; }
+  const lang = $('voiceLang').value;
+  const out = { lang, words: 0, restarts: 0, errors: [], heard: '' };
+  $('bothBtn').disabled = true;
+  let listening = true;
+  try {
+    await open({ w: 3840, h: 2160, fps: 30 }, true);
+    $('dot').classList.add('on');
+    const rec = new MediaRecorder(stream, { mimeType: results.mimeSupported[0] || undefined, videoBitsPerSecond: 50e6, audioBitsPerSecond: 192e3 });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const recDone = new Promise((r) => (rec.onstop = r));
+    rec.start(1000);
+
+    let finalText = '';
+    const startSr = () => {
+      const sr = new SR();
+      sr.lang = lang; sr.interimResults = true; sr.continuous = true;
+      sr.onresult = (e) => {
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) finalText += ' ' + e.results[i][0].transcript; else interim += ' ' + e.results[i][0].transcript;
+        }
+        out.heard = (finalText + interim).trim();
+        out.words = out.heard ? out.heard.split(/\s+/).length : 0;
+      };
+      sr.onerror = (e) => out.errors.push(e.error);
+      sr.onend = () => { if (listening && out.restarts < 15) { out.restarts++; setTimeout(startSr, 150); } }; // Safari ends sessions on its own; real app restarts too
+      sr.start();
+    };
+    startSr();
+
+    for (let s = 20; s > 0; s--) {
+      const track = stream.getAudioTracks()[0];
+      $('bothStatus').textContent = `Recording + listening… ${s}s · words heard: ${out.words} · mic ${track ? track.readyState : 'none'}`;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    listening = false;
+    rec.stop();
+    await recDone;
+    stopStream();
+    $('bothStatus').textContent = 'Checking the clip audio…';
+    const blob = new Blob(chunks, { type: rec.mimeType });
+    out.clipMB = +(blob.size / 1e6).toFixed(1);
+    out.audioDb = await clipAudioLevel(blob);
+    lastClip = blob; $('saveBtn').hidden = false;
+    const audioOk = out.audioDb !== null && out.audioDb > -55;
+    const voiceOk = out.words >= 5;
+    $('bothStatus').innerHTML =
+      `Words heard: <b class="${voiceOk ? 'ok' : 'bad'}">${out.words}</b> · clip audio: <b class="${audioOk ? 'ok' : out.audioDb === null ? 'warn' : 'bad'}">${out.audioDb === null ? 'could not check' : out.audioDb + ' dB'}</b> · restarts ${out.restarts}${out.errors.length ? ` · errors: ${out.errors.join(', ')}` : ''}<br>` +
+      (voiceOk && audioOk ? '<span class="ok">Both work together. Follow voice is possible in the web app.</span>'
+        : !voiceOk && audioOk ? '<span class="bad">Recording took the mic; voice heard too little.</span>'
+        : voiceOk && !audioOk ? '<span class="bad">Voice worked but the clip audio is silent or unchecked.</span>'
+        : '<span class="bad">Neither worked well together.</span>');
+  } catch (err) {
+    out.errors.push(`${err.name}: ${err.message}`);
+    $('bothStatus').innerHTML = `<span class="bad">Error: ${err.name} — ${err.message}</span>`;
+  } finally {
+    listening = false;
+    stopStream();
+    results.both = out;
+    $('bothBtn').disabled = false;
+    render();
+  }
+};
+
 function render() {
   const best = results.modes.length ? results.modes[bestModeIndex()] : null;
   const rec = results.recordings[results.recordings.length - 1];
@@ -338,6 +427,7 @@ function render() {
     results.cameraError ? `camera error: ${results.cameraError}` : '',
     results.recordError ? `record error: ${results.recordError}` : '',
     `voice: ${results.voice ?? 'not tested'}`,
+    results.both ? `record+voice (${results.both.lang}): words ${results.both.words}, clip audio ${results.both.audioDb ?? '?'} dB, ${results.both.clipMB ?? '?'}MB, restarts ${results.both.restarts}, errors [${results.both.errors.join(', ')}], heard: "${results.both.heard.slice(0, 160)}"` : '',
   ].filter(Boolean);
   $('report').textContent = lines.join('\n');
 }
