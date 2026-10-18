@@ -86,7 +86,7 @@
   <section>
     <h2>4 · Record + voice together</h2>
     <button id="bothBtn" class="ghost">Record 20 s while listening (read any text aloud)</button>
-    <p class="status" id="bothStatus">Uses the language picked in step 3. This is how a real Follow-voice take works.</p>
+    <p class="status" id="bothStatus">Uses the language picked in step 3. This is how a real Follow-voice take works. Wait for the result line (about 30 s) before copying.</p>
   </section>
 
   <section>
@@ -342,9 +342,10 @@ $('bothBtn').onclick = async () => {
   $('bothBtn').disabled = true;
   let listening = true;
   try {
-    await open({ w: 3840, h: 2160, fps: 30 }, true);
+    // 1080p keeps the clip small enough to decode in a Safari tab; this step only tests the mic.
+    await open({ w: 1920, h: 1080, fps: 30 }, true);
     $('dot').classList.add('on');
-    const rec = new MediaRecorder(stream, { mimeType: results.mimeSupported[0] || undefined, videoBitsPerSecond: 50e6, audioBitsPerSecond: 192e3 });
+    const rec = new MediaRecorder(stream, { mimeType: results.mimeSupported[0] || undefined, videoBitsPerSecond: 6e6, audioBitsPerSecond: 192e3 });
     const chunks = [];
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     const recDone = new Promise((r) => (rec.onstop = r));
